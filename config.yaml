@@ -1,0 +1,9 @@
+name: report_pytorch_17flowers
+hydra:
+  run:
+    dir: outputs/
+dirs:
+  dataset:
+    tgz: dataset/17flowers.tgz
+    pickle: dataset/flowers17.pth
+  models: models/
