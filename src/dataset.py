@@ -1,11 +1,13 @@
 """
 データセットの前処理関係
 """
-import numpy as np
 import re
 from typing import Union, Tuple, List
 import tarfile
 from pathlib import Path
+
+import torch.utils.data
+
 from logger import get_logger
 from parameters import Parameters
 from glob import glob
@@ -13,6 +15,8 @@ from PIL import Image
 from tqdm import tqdm
 import pickle
 
+# データセットの型
+Dataset = List[Tuple[Image.Image, int]]
 
 def extract_dataset_tgz(params: Parameters) -> Union[Path, None]:
     logger = get_logger()
@@ -34,35 +38,36 @@ def extract_dataset_tgz(params: Parameters) -> Union[Path, None]:
     return images_path
 
 
-def get_image_label(path: Path) -> Union[str, None]:
+def get_image_label(path: Path) -> Union[int, None]:
     match = re.match(r'image_(\d+).jpg', path.name)
     if match is None:
         return None
     num = int(match.group(1))
     if not (1 <= num <= 1360):
         return None
-    return [
-        'Tulip',
-        'Snowdrop',
-        'LilyValley',
-        'Bluebell',
-        'Crocus',
-        'Iris',
-        'Tigerlily',
-        'Daffodil',
-        'Fritillary',
-        'Sunflower',
-        'Daisy',
-        'ColtsFoot',
-        'Dandelion',
-        'Cowslip',
-        'Buttercup',
-        'Windflower',
-        'Pansy',
-    ][(num - 1) // 80]
+    return (num - 1) // 80
+    # return [
+    #     'Tulip',
+    #     'Snowdrop',
+    #     'LilyValley',
+    #     'Bluebell',
+    #     'Crocus',
+    #     'Iris',
+    #     'Tigerlily',
+    #     'Daffodil',
+    #     'Fritillary',
+    #     'Sunflower',
+    #     'Daisy',
+    #     'ColtsFoot',
+    #     'Dandelion',
+    #     'Cowslip',
+    #     'Buttercup',
+    #     'Windflower',
+    #     'Pansy',
+    # ][(num - 1) // 80]
 
 
-def process_image_labels(images_path: Path) -> List[Tuple[np.ndarray, str]]:
+def process_image_labels(images_path: Path) -> Dataset:
     logger = get_logger()
     logger.info(f'- Process images')
 
@@ -73,14 +78,15 @@ def process_image_labels(images_path: Path) -> List[Tuple[np.ndarray, str]]:
         if label is None:
             continue
         # logger.debug(f'{image_path_str} -> {label}')
-        im = np.array(Image.open(image_path))
+        im = Image.open(image_path)
+        im = im.resize((256, 256))
         res.append((im, label))
 
     logger.info(f'{len(res)} images processed')
     return res
 
 
-def save_images_and_labels_as_pickle(images_and_labels: List[Tuple[np.ndarray, str]], pickle_path: Path):
+def save_images_and_labels_as_pickle(images_and_labels: Dataset, pickle_path: Path):
     logger = get_logger()
     logger.info(f'- Save as Pickle')
 
@@ -90,7 +96,7 @@ def save_images_and_labels_as_pickle(images_and_labels: List[Tuple[np.ndarray, s
     logger.info(f'dump as pickle @{pickle_path}')
 
 
-def load_images_and_labels_as_pickle(pickle_path: Path) -> Union[List[Tuple[np.ndarray, str]], None]:
+def load_images_and_labels_as_pickle(pickle_path: Path) -> Union[Dataset, None]:
     logger = get_logger()
     logger.info(f'- Load Pickle')
     with open(pickle_path, 'rb') as pkl:
@@ -99,7 +105,7 @@ def load_images_and_labels_as_pickle(pickle_path: Path) -> Union[List[Tuple[np.n
     return images_and_labels
 
 
-def load_dataset(params: Parameters) -> Union[List[Tuple[np.ndarray, str]], None]:
+def load_flower17_dataset(params: Parameters) -> Union[Dataset, None]:
     # preprocess
     if not params.pickle_path.exists():
         images_path = extract_dataset_tgz(params)
@@ -109,3 +115,22 @@ def load_dataset(params: Parameters) -> Union[List[Tuple[np.ndarray, str]], None
         save_images_and_labels_as_pickle(image_and_labels, params.pickle_path)
 
     return load_images_and_labels_as_pickle(params.pickle_path)
+
+
+"""
+Flower17データセット
+"""
+class Flower17(torch.utils.data.Dataset):
+    def __init__(self, params: Parameters, transform):
+        self.items = load_flower17_dataset(params)
+        self.transform = transform
+        self.data_counts = len(self.items)
+
+    def __len__(self) -> int:
+        return self.data_counts
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
+        im, label = self.items[index]
+        # apply transforms
+        im: torch.Tensor = self.transform(im)
+        return im, label
