@@ -6,7 +6,6 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
-import torch.nn as nn
 import pytorch_lightning as ptl
 import torchvision.transforms as transforms
 
@@ -16,6 +15,7 @@ from parameters import Parameters
 # (batch, channel, h, w) -> (batch, 1)
 Batch = Tuple[torch.Tensor, torch.Tensor]
 
+
 class Model(ptl.LightningModule):
     def __init__(self, params: Parameters):
         super().__init__()
@@ -23,50 +23,40 @@ class Model(ptl.LightningModule):
         self.params = params
         # TODO
         self.transform = transforms.Compose([
-            # resize to (224, 224)
-            transforms.Resize(224),
+            transforms.Resize(256),
             transforms.CenterCrop(224),
-            # transforms.Grayscale(),
             # PIL.Image -> Tensor
             transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
         # hyper parameters
-        self.batch_size = 4
+        self.batch_size = 128
 
         # metrics
         self.train_acc = ptl.metrics.Accuracy()
         self.val_acc = ptl.metrics.Accuracy()
         self.test_acc = ptl.metrics.Accuracy()
+        self.model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (batch, channels, h, w)
-        print(x.shape)
+        # ResNet: (batch, channels, h, w) -> (batch, dim)
+        y = self.model.forward(x)
+        return y
 
-        # TODO
-        pass
-
-
-    def training_step(self, batch: Batch, batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: Batch, batch_idx: int):
         x, y = batch
         y_: torch.Tensor = self(x)
-        loss: torch.Tensor = F.nll_loss(y_, y)
-        print(f'loss: {loss.item()}')
+        loss = F.cross_entropy(y_, y)
+        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
-    def validation_step(self, batch: Batch, batch_idx: int) -> torch.Tensor:
-        x, t = batch
-        y: torch.Tensor = self(x)
-        loss: torch.Tensor = F.nll_loss(y, t)
-        acc: torch.Tensor = self.val_acc(y, t)
-
-        print(f'val_loss: {loss.item()}')
-        print(f'val_acc: {acc.item()}')
-
+    def validation_step(self, batch: Batch, batch_idx: int):
+        x, y = batch
+        y_ = self(x)
+        loss = F.cross_entropy(y_, y)
+        self.log('val/loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
-
-    def test_step(self, batch: Batch, batch_idx: int) -> torch.Tensor:
-        return self.validation_step(batch, batch_idx)
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-3)

@@ -15,13 +15,15 @@ def main(config: DictConfig):
     set_logger(logger)
     params = read_parameters(config)
 
-    # TODO:
-    device = torch.device('cpu')
+    device = torch.device('cuda')
     model = Model(params)
     model = model.to(device)
 
-    trainer = Trainer()
+    trainer = Trainer(max_epochs=3)
     trainer.fit(model)
+
+    results = trainer.test()
+    print(results)
 
 if __name__ == '__main__':
     main()
