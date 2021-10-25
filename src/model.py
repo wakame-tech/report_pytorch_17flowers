@@ -67,7 +67,6 @@ class Model(ptl.LightningModule):
         train_length = int(len(dataset) * 0.9)
         val_length = len(dataset) - train_length
         self.train_dataset, self.val_dataset = random_split(dataset, [train_length, val_length])
-        # TODO
         self.test_dataset = Flower17(params=self.params, transform=self.transform)
 
     def train_dataloader(self):
